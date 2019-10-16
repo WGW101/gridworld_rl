@@ -41,13 +41,13 @@ def epsilon_greedy(z, q_net, epsilon=0):
     return a.item(), p.item()
 
 
-def make_batches(memory, batch_size, dev):
+def make_batches(memory, batch_size, max_batch_count, dev):
     n = len(memory)
     if n < batch_size:
         raise StopIteration()
     indices = torch.randperm(n)
-    for b in range(0, n, batch_size):
-        batch = (memory[i] for i in indices[b:b + batch_size])
+    for b in range(min(max_batch_count, n / batch_size)):
+        batch = (memory[i] for i in indices[batch_size * b:batch_size * (b + 1)])
         batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p = zip(*memory)
 
         batch_z = torch.stack(batch_z).float().to(dev)
@@ -68,6 +68,8 @@ if __name__ == "__main__":
     MEM_SIZE = 10000
     MAX_T = 200
     BATCH_SIZE = 32
+    STEP_SAMPLE_COUNT = 320
+    MAX_BATCH_COUNT = 10
     DISCOUNT = 0.99
     AVG_RATE = 0.05
     FREEZE_PERIOD = 20
@@ -98,18 +100,21 @@ if __name__ == "__main__":
     try:
         with tqdm.trange(MAX_ITER) as progress:
             for it in progress:
-                trajectory, cumul, success = sample_trajectory(env, lambda z: epsilon_greedy(z, q_net, epsilon), MAX_T)
-                memory.extend(trajectory)
-                if avg_cumul is None:
-                    avg_cumul = cumul
-                    avg_success = int(success)
-                else:
-                    avg_cumul = (1 - AVG_RATE) * avg_cumul + AVG_RATE * cumul
-                    avg_success = (1 - AVG_RATE) * avg_success + AVG_RATE * int(success)
+                new_samples = 0
+                while new_samples < STEP_SAMPLE_COUNT:
+                    trajectory, cumul, success = sample_trajectory(env, lambda z: epsilon_greedy(z, q_net, epsilon), MAX_T)
+                    memory.extend(trajectory)
+                    new_samples += len(trajectory)
+                    if avg_cumul is None:
+                        avg_cumul = cumul
+                        avg_success = int(success)
+                    else:
+                        avg_cumul = (1 - AVG_RATE) * avg_cumul + AVG_RATE * cumul
+                        avg_success = (1 - AVG_RATE) * avg_success + AVG_RATE * int(success)
 
                 tot_loss = 0
                 batch_count = 0
-                for batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p in make_batches(memory, BATCH_SIZE, dev):
+                for batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p in make_batches(memory, BATCH_SIZE, MAX_BATCH_COUNT, dev):
                     nxt_val = target_net(batch_nxt).max(1, keepdim=True)[0]
                     nxt_val.masked_fill_(batch_done, 0)
                     target = batch_r + DISCOUNT * nxt_val
