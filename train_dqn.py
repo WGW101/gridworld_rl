@@ -5,6 +5,8 @@ from itertools import chain
 from gridworld import GridWorld
 from collections import deque as ReplayMemory
 import tqdm
+import os
+import time
 
 
 def buildMLP(*sizes):
@@ -63,14 +65,17 @@ if __name__ == "__main__":
     HIDDEN_DIMS = (256, 128)
     USE_CUDA = False
     MAX_EPOCH = 1000
-    BASE_LR = 0.0005
+    BASE_LR = 0.001
+    LR_STEP = 10
+    LR_DECAY = 0.99
     BASE_EPSILON = 0.9
-    MIN_EPSILON = 0.05
-    MEM_SIZE = 10000
+    EPS_STEP = 10
+    EPS_DECAY = 0.99
+    MEM_SIZE = 1000
     MAX_T = 200
     BATCH_SIZE = 32
     STEP_SAMPLE_COUNT = 320
-    MAX_BATCH_COUNT = 10
+    MAX_BATCH_COUNT = 12
     DISCOUNT = 0.99
     AVG_RATE = 0.05
     FREEZE_PERIOD = 50
@@ -81,6 +86,7 @@ if __name__ == "__main__":
     env.add_start(1, 1)
     env.add_start(9, 1)
     env.add_goal(9, 9)
+    print(env)
 
     dev = torch.device("cuda" if USE_CUDA and torch.cuda.is_available() else "cpu")
     q_net = buildMLP(2, *HIDDEN_DIMS, 4)
@@ -90,6 +96,7 @@ if __name__ == "__main__":
     target_net.to(dev)
 
     optim = torch.optim.SGD(q_net.parameters(), lr=BASE_LR)
+    lr_sched = torch.optim.lr_scheduler.StepLR(optim, LR_STEP, LR_DECAY)
     epsilon = BASE_EPSILON
 
     memory = ReplayMemory(maxlen=MEM_SIZE)
@@ -103,7 +110,8 @@ if __name__ == "__main__":
             for ep in progress:
                 new_samples = 0
                 while new_samples < STEP_SAMPLE_COUNT:
-                    trajectory, cumul, success = sample_trajectory(env, lambda z: epsilon_greedy(z, q_net, epsilon), MAX_T)
+                    trajectory, cumul, success = sample_trajectory(
+                            env, lambda z: epsilon_greedy(z, q_net, epsilon), MAX_T)
                     memory.extend(trajectory)
                     new_samples += len(trajectory)
                     if avg_cumul is None:
@@ -115,7 +123,8 @@ if __name__ == "__main__":
 
                 tot_loss = 0
                 batch_count = 0
-                for batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p in make_batches(memory, BATCH_SIZE, MAX_BATCH_COUNT, dev):
+                for batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p in make_batches(
+                        memory, BATCH_SIZE, MAX_BATCH_COUNT, dev):
                     nxt_val = target_net(batch_nxt).max(1, keepdim=True)[0]
                     nxt_val.masked_fill_(batch_done, 0)
                     target = batch_r + DISCOUNT * nxt_val
@@ -136,15 +145,20 @@ if __name__ == "__main__":
                     else:
                         avg_loss = (1 - AVG_RATE) * avg_loss + AVG_RATE * tot_loss / batch_count
                     stats.append((ep, avg_loss, avg_cumul, avg_success, epsilon, optim.param_groups[0]["lr"]))
-                    progress.set_postfix(loss=avg_loss, cumul=avg_cumul, success=avg_success, epsilon=epsilon)
+                    progress.set_postfix(loss=avg_loss, cumul=avg_cumul, success=avg_success,
+                            epsilon=epsilon, lr=optim.param_groups[0]["lr"])
 
                 if ep % FREEZE_PERIOD == FREEZE_PERIOD - 1:
                     target_net.load_state_dict(q_net.state_dict())
-                epsilon = (1 - ep / MAX_EPOCH) * (BASE_EPSILON - MIN_EPSILON) + MIN_EPSILON
+                lr_sched.step()
+                if ep % EPS_STEP == EPS_STEP - 1:
+                    epsilon *= EPS_DECAY
     except KeyboardInterrupt:
         pass
-    torch.save(q_net.state_dict(), "trained_mlp_gridworld_{}.pkl".format(ep))
-    with open("training_stats.csv", 'w') as f:
+    dirname = time.strftime("%y%m%d_%H%M%S")
+    os.makedirs(dirname, exist_ok=True)
+    torch.save(q_net.state_dict(), os.path.join(dirname, "trained_mlp_gridworld_{}.pkl".format(ep)))
+    with open(os.path.join(dirname, "training_stats.csv"), 'w') as f:
         for ep_stat in stats:
             f.write(', '.join(str(s) for s in ep_stat))
             f.write('\n')
