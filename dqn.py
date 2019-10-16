@@ -65,6 +65,7 @@ if __name__ == "__main__":
     MAX_EPOCHS = 1000
     BASE_LR = 0.0005
     BASE_EPSILON = 0.9
+    MIN_EPSILON = 0.05
     MEM_SIZE = 10000
     MAX_T = 200
     BATCH_SIZE = 32
@@ -72,7 +73,7 @@ if __name__ == "__main__":
     MAX_BATCH_COUNT = 10
     DISCOUNT = 0.99
     AVG_RATE = 0.05
-    FREEZE_PERIOD = 20
+    FREEZE_PERIOD = 50
 
     env = GridWorld(9, 9)
     env.add_horizontal_wall(5, 1, 9)
@@ -142,7 +143,7 @@ if __name__ == "__main__":
                     target_net.load_state_dict(q_net.state_dict())
                     q_net.load_state_dict(temp)
 
-                epsilon = (1 - ep / MAX_ITER) * BASE_EPSILON
+                epsilon = (1 - ep / MAX_ITER) * (BASE_EPSILON - MIN_EPSILON) + MIN_EPSILON
     except KeyboardInterrupt:
         pass
     torch.save(q_net.state_dict(), "trained_mlp_gridworld_{}.pkl".format(ep))
