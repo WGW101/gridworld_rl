@@ -62,7 +62,7 @@ def make_batches(memory, batch_size, max_batch_count, dev):
 if __name__ == "__main__":
     HIDDEN_DIMS = (256, 128)
     USE_CUDA = False
-    MAX_EPOCHS = 1000
+    MAX_EPOCH = 1000
     BASE_LR = 0.0005
     BASE_EPSILON = 0.9
     MIN_EPSILON = 0.05
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     avg_success = None
     stats = []
     try:
-        with tqdm.trange(MAX_EPOCHS) as progress:
+        with tqdm.trange(MAX_EPOCH) as progress:
             for ep in progress:
                 new_samples = 0
                 while new_samples < STEP_SAMPLE_COUNT:
@@ -135,7 +135,7 @@ if __name__ == "__main__":
                         avg_loss = tot_loss / batch_count
                     else:
                         avg_loss = (1 - AVG_RATE) * avg_loss + AVG_RATE * tot_loss / batch_count
-                    stats.append((it, avg_loss, avg_cumul, avg_success, epsilon, optim.param_groups[0]["lr"]))
+                    stats.append((ep, avg_loss, avg_cumul, avg_success, epsilon, optim.param_groups[0]["lr"]))
                     progress.set_postfix(loss=avg_loss, cumul=avg_cumul, success=avg_success, epsilon=epsilon)
 
                 if ep % FREEZE_PERIOD == FREEZE_PERIOD - 1:
@@ -143,7 +143,7 @@ if __name__ == "__main__":
                     target_net.load_state_dict(q_net.state_dict())
                     q_net.load_state_dict(temp)
 
-                epsilon = (1 - ep / MAX_ITER) * (BASE_EPSILON - MIN_EPSILON) + MIN_EPSILON
+                epsilon = (1 - ep / MAX_EPOCH) * (BASE_EPSILON - MIN_EPSILON) + MIN_EPSILON
     except KeyboardInterrupt:
         pass
     torch.save(q_net.state_dict(), "trained_mlp_gridworld_{}.pkl".format(ep))
