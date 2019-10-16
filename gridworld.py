@@ -112,7 +112,7 @@ class GridWorld:
         return self.observation()
 
     def observation(self):
-        return self.agent_pos
+        return self.agent_pos.clone()
 
     def step(self, action):
         drift = torch.rand((1,))
