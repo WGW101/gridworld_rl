@@ -62,7 +62,7 @@ def make_batches(memory, batch_size, max_batch_count, dev):
 if __name__ == "__main__":
     HIDDEN_DIMS = (256, 128)
     USE_CUDA = False
-    MAX_ITER = 1000
+    MAX_EPOCHS = 1000
     BASE_LR = 0.0005
     BASE_EPSILON = 0.9
     MEM_SIZE = 10000
@@ -98,8 +98,8 @@ if __name__ == "__main__":
     avg_success = None
     stats = []
     try:
-        with tqdm.trange(MAX_ITER) as progress:
-            for it in progress:
+        with tqdm.trange(MAX_EPOCHS) as progress:
+            for ep in progress:
                 new_samples = 0
                 while new_samples < STEP_SAMPLE_COUNT:
                     trajectory, cumul, success = sample_trajectory(env, lambda z: epsilon_greedy(z, q_net, epsilon), MAX_T)
@@ -137,16 +137,16 @@ if __name__ == "__main__":
                     stats.append((it, avg_loss, avg_cumul, avg_success, epsilon, optim.param_groups[0]["lr"]))
                     progress.set_postfix(loss=avg_loss, cumul=avg_cumul, success=avg_success, epsilon=epsilon)
 
-                if it % FREEZE_PERIOD == FREEZE_PERIOD - 1:
+                if ep % FREEZE_PERIOD == FREEZE_PERIOD - 1:
                     temp = target_net.state_dict()
                     target_net.load_state_dict(q_net.state_dict())
                     q_net.load_state_dict(temp)
 
-                epsilon = (1 - it / MAX_ITER) * BASE_EPSILON
+                epsilon = (1 - ep / MAX_ITER) * BASE_EPSILON
     except KeyboardInterrupt:
         pass
-    torch.save(q_net.state_dict(), "trained_mlp_gridworld_{}.pkl".format(it))
+    torch.save(q_net.state_dict(), "trained_mlp_gridworld_{}.pkl".format(ep))
     with open("training_stats.csv", 'w') as f:
-        for it_stat in stats:
-            f.write(', '.join(str(s) for s in it_stat))
+        for ep_stat in stats:
+            f.write(', '.join(str(s) for s in ep_stat))
             f.write('\n')
