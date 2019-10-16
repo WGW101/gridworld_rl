@@ -139,10 +139,7 @@ if __name__ == "__main__":
                     progress.set_postfix(loss=avg_loss, cumul=avg_cumul, success=avg_success, epsilon=epsilon)
 
                 if ep % FREEZE_PERIOD == FREEZE_PERIOD - 1:
-                    temp = target_net.state_dict()
                     target_net.load_state_dict(q_net.state_dict())
-                    q_net.load_state_dict(temp)
-
                 epsilon = (1 - ep / MAX_EPOCH) * (BASE_EPSILON - MIN_EPSILON) + MIN_EPSILON
     except KeyboardInterrupt:
         pass
