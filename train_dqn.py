@@ -17,10 +17,10 @@ def parse_args():
     MAX_EPOCH = 1000
     BASE_LR = 0.001
     LR_STEP = 10
-    LR_DECAY = 0.99
+    LR_DECAY = None
     BASE_EPSILON = 0.9
     EPS_STEP = 10
-    EPS_DECAY = 0.99
+    EPS_DECAY = None
     MEM_SIZE = 1000
     MAX_T = 200
     BATCH_SIZE = 32
@@ -73,7 +73,7 @@ def epsilon_greedy(z, q_net, epsilon=0):
     dist = q_net(z.float().unsqueeze(0)).softmax(1)
     n_a = dist.size(1)
     if torch.rand((1,)) < epsilon:
-        a = torch.randint(0, n_a, (1,1))
+        a = torch.randint(0, n_a, (1, 1))
     else:
         a = dist.argmax(1, keepdim=True)
     p = epsilon / n_a + (1 - epsilon) * dist.gather(1, a)
@@ -102,7 +102,7 @@ def make_batches(memory, batch_size, max_batch_count, dev):
     if n < batch_size:
         raise StopIteration()
     indices = torch.randperm(n)
-    for b in range(min(max_batch_count, n / batch_size)):
+    for b in range(min(max_batch_count, n // batch_size)):
         batch = (memory[i] for i in indices[batch_size * b:batch_size * (b + 1)])
         batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p = zip(*memory)
 
