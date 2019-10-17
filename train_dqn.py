@@ -12,17 +12,17 @@ import json
 
 
 def parse_args():
-    HIDDEN_DIMS = (256, 128)
+    HIDDEN_DIMS = (128, 64)
     USE_CUDA = False
-    MAX_ITER = 10000
-    BASE_LR = 0.0005
+    MAX_ITER = 3000
+    BASE_LR = 0.0001
     LR_STEP = 100
     LR_DECAY = None
     BASE_EPSILON = 0.95
     MIN_EPSILON = 0.05
     EPS_STEP = 100
     EPS_DECAY = None
-    MEM_SIZE = 1000
+    MEM_SIZE = 500
     MAX_T = 200
     BATCH_SIZE = 64
     DISCOUNT = 0.99
@@ -66,7 +66,7 @@ def build_MLP(*sizes):
 
 
 def epsilon_greedy(z, q_net, epsilon=0):
-    dist = q_net(z.float().unsqueeze(0)).softmax(1)
+    dist = q_net(((z.float() - 1) / 8).unsqueeze(0)).softmax(1)
     n_a = dist.size(1)
     if torch.rand((1,)) < epsilon:
         a = torch.randint(0, n_a, (1, 1))
@@ -142,7 +142,7 @@ def main(args):
     avg_cumul = None
     avg_success = None
     avg_loss = None
-    AVG_R = 0.02
+    AVG_R = 0.05
     stats = []
     try:
         with tqdm.trange(args.max_iter) as progress:
@@ -158,7 +158,7 @@ def main(args):
                 lr = optim.param_groups[0]["lr"]
                 progress.set_postfix(cumul=avg_cumul, success=avg_success, loss=avg_loss,
                         lr=lr, eps=epsilon)
-                stats.append((it, cumul, success, loss, lr, epsilon))
+                stats.append((it, avg_cumul, avg_success, avg_loss, lr, epsilon))
 
                 if it % args.freeze_period == args.freeze_period - 1:
                     target_net.load_state_dict(q_net.state_dict())
