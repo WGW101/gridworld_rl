@@ -152,22 +152,3 @@ class GridWorld:
             done = True
 
         return self.observation(), reward, done
-
-
-if __name__ == "__main__":
-    g = GridWorld(3, 3, GridWorld.TileType.DIRTY)
-    g.add_start(1, 1)
-    g.add_goal(3, 3)
-    z = g.reset()
-    done = False
-    cumul = 0
-    while not done:
-        print(g)
-        a = {"w": GridWorld.Direction.NORTH,
-             "a": GridWorld.Direction.WEST,
-             "s": GridWorld.Direction.SOUTH,
-             "d": GridWorld.Direction.EAST}.get(input())
-        z, r, done = g.step(a)
-        cumul += r
-    g.terminate()
-    print(cumul)
