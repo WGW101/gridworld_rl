@@ -7,24 +7,26 @@ from collections import deque as ReplayMemory
 import tqdm
 import os
 import time
+import math
 from argparse import ArgumentParser
 import json
 
 
 def parse_args():
-    HIDDEN_DIMS = (128, 64)
+    HIDDEN_DIMS = (256,)
     USE_CUDA = False
     MAX_ITER = 3000
-    BASE_LR = 0.0001
+    BASE_LR = 0.01
     LR_STEP = 100
     LR_DECAY = None
     BASE_EPSILON = 0.95
     MIN_EPSILON = 0.05
     EPS_STEP = 100
     EPS_DECAY = None
-    MEM_SIZE = 500
+    MEM_SIZE = 1000
     MAX_T = 200
     BATCH_SIZE = 64
+    BATCH_COUNT = 4
     DISCOUNT = 0.99
     FREEZE_PERIOD = 100
 
@@ -42,6 +44,7 @@ def parse_args():
     parser.add_argument("--mem-size", type=int, default=MEM_SIZE)
     parser.add_argument("--max-t", type=int, default=MAX_T)
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    parser.add_argument("--batch-count", type=int, default=BATCH_COUNT)
     parser.add_argument("--discount", type=float, default=DISCOUNT)
     parser.add_argument("--freeze-period", type=int, default=FREEZE_PERIOD)
     parser.add_argument("--output-dir", default=time.strftime("%y%m%d_%H%M%S"))
@@ -53,7 +56,6 @@ def build_env():
     env = GridWorld(9, 9)
     env.add_horizontal_wall(5, 1, 9)
     env.add_clear_surface(4, 5, 6, 5)
-    env.add_start(1, 1)
     env.add_start(9, 1)
     env.add_goal(9, 9)
     return env
@@ -94,19 +96,20 @@ def sample_trajectory(env, policy, max_t=None):
     return trajectory, cumul, int(done)
 
 
-def sample_batch(memory, batch_size, dev):
+def sample_batch(memory, batch_size, batch_count, dev):
     n = len(memory)
     indices = torch.randperm(n)
-    batch = (memory[i] for i in indices[:batch_size])
-    batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p = zip(*memory)
+    for b in range(min(batch_count, math.ceil(n / batch_size))):
+        batch = (memory[i] for i in indices[b * batch_size:(b + 1) * batch_size])
+        batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p = zip(*memory)
 
-    batch_z = torch.stack(batch_z).float().to(dev)
-    batch_a = torch.tensor(batch_a, dtype=torch.long).unsqueeze(1).to(dev)
-    batch_r = torch.tensor(batch_r, dtype=torch.float).unsqueeze(1).to(dev)
-    batch_nxt = torch.stack(batch_nxt).float().to(dev)
-    batch_done = torch.tensor(batch_done, dtype=torch.bool).unsqueeze(1).to(dev)
-    batch_p = torch.tensor(batch_p, dtype=torch.float).unsqueeze(1).to(dev)
-    return batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p
+        batch_z = torch.stack(batch_z).float().to(dev)
+        batch_a = torch.tensor(batch_a, dtype=torch.long).unsqueeze(1).to(dev)
+        batch_r = torch.tensor(batch_r, dtype=torch.float).unsqueeze(1).to(dev)
+        batch_nxt = torch.stack(batch_nxt).float().to(dev)
+        batch_done = torch.tensor(batch_done, dtype=torch.bool).unsqueeze(1).to(dev)
+        batch_p = torch.tensor(batch_p, dtype=torch.float).unsqueeze(1).to(dev)
+        yield batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p
 
 
 def update_weights(q_net, target_net, optim, batch_z, batch_a, batch_r, batch_nxt, batch_done, discount):
@@ -150,7 +153,12 @@ def main(args):
                 trajectory, cumul, success = sample_trajectory(env,
                         lambda z: epsilon_greedy(z, q_net, epsilon), args.max_t)
                 memory.extend(trajectory)
-                loss = update_weights(q_net, target_net, optim, *sample_batch(memory, args.batch_size, dev))
+
+                loss = 0
+                for b, batch in enumerate(sample_batch(memory, args.batch_size, args.batch_count, dev)):
+                    loss += update_weights(q_net, target_net, optim, *batch)
+                if b > 0:
+                    loss /= b
 
                 avg_cumul = cumul if avg_cumul is None else (1 - AVG_R) * avg_cumul + AVG_R * cumul
                 avg_success = success if avg_success is None else (1 - AVG_R) * avg_success + AVG_R * success
