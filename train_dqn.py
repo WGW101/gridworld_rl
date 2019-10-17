@@ -14,27 +14,29 @@ import json
 def parse_args():
     HIDDEN_DIMS = (256, 128)
     USE_CUDA = False
-    MAX_EPOCH = 1000
-    BASE_LR = 0.001
-    LR_STEP = 10
+    MAX_ITER = 10000
+    BASE_LR = 0.0005
+    LR_STEP = 100
     LR_DECAY = None
-    BASE_EPSILON = 0.9
-    EPS_STEP = 10
+    BASE_EPSILON = 0.95
+    MIN_EPSILON = 0.05
+    EPS_STEP = 100
     EPS_DECAY = None
     MEM_SIZE = 1000
     MAX_T = 200
-    BATCH_SIZE = 32
+    BATCH_SIZE = 64
     DISCOUNT = 0.99
     FREEZE_PERIOD = 100
 
     parser = ArgumentParser()
     parser.add_argument("--hidden-dims", type=int, nargs='+', default=HIDDEN_DIMS)
     parser.add_argument("--use-cuda", action="store_true", default=USE_CUDA)
-    parser.add_argument("--max-epoch", type=int, default=MAX_EPOCH)
+    parser.add_argument("--max-iter", type=int, default=MAX_ITER)
     parser.add_argument("--base-lr", type=float, default=BASE_LR)
     parser.add_argument("--lr-step", type=int, default=LR_STEP)
     parser.add_argument("--lr-decay", type=float, default=LR_DECAY)
     parser.add_argument("--base-epsilon", type=float, default=BASE_EPSILON)
+    parser.add_argument("--min-epsilon", type=float, default=MIN_EPSILON)
     parser.add_argument("--eps-step", type=int, default=EPS_STEP)
     parser.add_argument("--eps-decay", type=float, default=EPS_DECAY)
     parser.add_argument("--mem-size", type=int, default=MEM_SIZE)
@@ -143,8 +145,8 @@ def main(args):
     AVG_R = 0.02
     stats = []
     try:
-        with tqdm.trange(args.max_epoch) as progress:
-            for ep in progress:
+        with tqdm.trange(args.max_iter) as progress:
+            for it in progress:
                 trajectory, cumul, success = sample_trajectory(env,
                         lambda z: epsilon_greedy(z, q_net, epsilon), args.max_t)
                 memory.extend(trajectory)
@@ -156,28 +158,26 @@ def main(args):
                 lr = optim.param_groups[0]["lr"]
                 progress.set_postfix(cumul=avg_cumul, success=avg_success, loss=avg_loss,
                         lr=lr, eps=epsilon)
-                stats.append((ep, cumul, success, loss, lr, epsilon))
+                stats.append((it, cumul, success, loss, lr, epsilon))
 
-                if ep % args.freeze_period == args.freeze_period - 1:
+                if it % args.freeze_period == args.freeze_period - 1:
                     target_net.load_state_dict(q_net.state_dict())
                 if args.lr_decay is not None:
                     lr_sched.step()
                 if args.eps_decay is None:
-                    epsilon = args.base_epsilon * (1 - ep / args.max_epoch)
-                elif ep % args.eps_step == args.eps_step - 1:
-                    epsilon *= args.eps_decay
+                    epsilon = (args.base_epsilon - args.min_epsilon) * (1 - it / args.max_iter) + args.min_epsilon
+                elif it % args.eps_step == args.eps_step - 1:
+                    epsilon = max(epsilon * args.eps_decay, args.min_epsilon)
     except KeyboardInterrupt:
         pass
 
     os.makedirs(args.output_dir, exist_ok=True)
     with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
         json.dump(vars(args), f, indent=4)
-    torch.save(q_net.state_dict(), os.path.join(args.output_dir, "trained_mlp_gridworld_{}.pkl".format(ep)))
+    torch.save(q_net.state_dict(), os.path.join(args.output_dir, "trained_mlp_{}.pkl".format(it)))
     with open(os.path.join(args.output_dir, "training_stats.csv"), 'w') as f:
-        f.write(', '.join("{:7}".format(s) for s in ("EPOCH", "CUMUL", "SUCCESS", "LOSS", "LR", "EPS")))
-        f.write('\n')
-        for ep_stat in stats:
-            f.write(', '.join(str(s) for s in ep_stat))
+        for it_stat in stats:
+            f.write(', '.join(str(s) for s in it_stat))
             f.write('\n')
 
 
