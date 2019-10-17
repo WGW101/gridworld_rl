@@ -156,7 +156,7 @@ def main(args):
 
                 loss = 0
                 for b, batch in enumerate(sample_batch(memory, args.batch_size, args.batch_count, dev)):
-                    loss += update_weights(q_net, target_net, optim, *batch)
+                    loss += update_weights(q_net, target_net, optim, *batch[:-1], args.discount)
                 if b > 0:
                     loss /= b
 
