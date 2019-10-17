@@ -15,7 +15,7 @@ import json
 def parse_args():
     HIDDEN_DIMS = (256,)
     USE_CUDA = False
-    MAX_ITER = 3000
+    MAX_ITER = 10000
     BASE_LR = 0.01
     LR_STEP = 100
     LR_DECAY = None
@@ -26,7 +26,7 @@ def parse_args():
     MEM_SIZE = 1000
     MAX_T = 200
     BATCH_SIZE = 64
-    BATCH_COUNT = 4
+    BATCH_COUNT = 100
     DISCOUNT = 0.99
     FREEZE_PERIOD = 100
 
@@ -56,6 +56,7 @@ def build_env():
     env = GridWorld(9, 9)
     env.add_horizontal_wall(5, 1, 9)
     env.add_clear_surface(4, 5, 6, 5)
+    env.add_start(1, 1)
     env.add_start(9, 1)
     env.add_goal(9, 9)
     return env
@@ -66,9 +67,12 @@ def build_MLP(*sizes):
         (nn.Linear(s_in, s_out), nn.ReLU()) for s_in, s_out in zip(sizes[:-2], sizes[1:-1])),
         nn.Linear(sizes[-2], sizes[-1]))
 
+def normalize_state(z, min_x=1, max_x=9):
+    return (z - min_x) / (max_x - min_x)
+
 
 def epsilon_greedy(z, q_net, epsilon=0):
-    dist = q_net(((z.float() - 1) / 8).unsqueeze(0)).softmax(1)
+    dist = q_net(normalize_state(z.float()).unsqueeze(0)).softmax(1)
     n_a = dist.size(1)
     if torch.rand((1,)) < epsilon:
         a = torch.randint(0, n_a, (1, 1))
@@ -101,12 +105,12 @@ def sample_batch(memory, batch_size, batch_count, dev):
     indices = torch.randperm(n)
     for b in range(min(batch_count, math.ceil(n / batch_size))):
         batch = (memory[i] for i in indices[b * batch_size:(b + 1) * batch_size])
-        batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p = zip(*memory)
+        batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p = zip(*batch)
 
-        batch_z = torch.stack(batch_z).float().to(dev)
+        batch_z = normalize_state(torch.stack(batch_z).float()).to(dev)
         batch_a = torch.tensor(batch_a, dtype=torch.long).unsqueeze(1).to(dev)
         batch_r = torch.tensor(batch_r, dtype=torch.float).unsqueeze(1).to(dev)
-        batch_nxt = torch.stack(batch_nxt).float().to(dev)
+        batch_nxt = normalize_state(torch.stack(batch_nxt).float()).to(dev)
         batch_done = torch.tensor(batch_done, dtype=torch.bool).unsqueeze(1).to(dev)
         batch_p = torch.tensor(batch_p, dtype=torch.float).unsqueeze(1).to(dev)
         yield batch_z, batch_a, batch_r, batch_nxt, batch_done, batch_p
