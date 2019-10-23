@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,35 +33,26 @@ def parse_args():
     FREEZE_PERIOD = 100
 
     parser = ArgumentParser()
-    parser.add_argument("--hidden-dims", type=int, nargs='+', default=HIDDEN_DIMS)
+    parser.add_argument("env")
+    parser.add_argument("--hidden-dims", "-d", type=int, nargs='+', default=HIDDEN_DIMS)
     parser.add_argument("--use-cuda", action="store_true", default=USE_CUDA)
-    parser.add_argument("--max-iter", type=int, default=MAX_ITER)
-    parser.add_argument("--base-lr", type=float, default=BASE_LR)
+    parser.add_argument("--max-iter", "-n", type=int, default=MAX_ITER)
+    parser.add_argument("--base-lr", "-r", type=float, default=BASE_LR)
     parser.add_argument("--lr-step", type=int, default=LR_STEP)
     parser.add_argument("--lr-decay", type=float, default=LR_DECAY)
     parser.add_argument("--base-epsilon", type=float, default=BASE_EPSILON)
     parser.add_argument("--min-epsilon", type=float, default=MIN_EPSILON)
     parser.add_argument("--eps-step", type=int, default=EPS_STEP)
     parser.add_argument("--eps-decay", type=float, default=EPS_DECAY)
-    parser.add_argument("--mem-size", type=int, default=MEM_SIZE)
+    parser.add_argument("--mem-size", "-m", type=int, default=MEM_SIZE)
     parser.add_argument("--max-t", type=int, default=MAX_T)
-    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
-    parser.add_argument("--batch-count", type=int, default=BATCH_COUNT)
-    parser.add_argument("--discount", type=float, default=DISCOUNT)
-    parser.add_argument("--freeze-period", type=int, default=FREEZE_PERIOD)
-    parser.add_argument("--output-dir", default=time.strftime("%y%m%d_%H%M%S"))
+    parser.add_argument("--batch-size", "-b", type=int, default=BATCH_SIZE)
+    parser.add_argument("--batch-count", "-c", type=int, default=BATCH_COUNT)
+    parser.add_argument("--discount", "-g", type=float, default=DISCOUNT)
+    parser.add_argument("--freeze-period", "-t", type=int, default=FREEZE_PERIOD)
+    parser.add_argument("--output-dir", "-o", default=os.path.join("output", time.strftime("%y%m%d_%H%M%S")))
 
     return parser.parse_args()
-
-
-def build_env():
-    env = GridWorld(9, 9)
-    env.add_horizontal_wall(5, 1, 9)
-    env.add_clear_surface(4, 5, 6, 5)
-    env.add_start(1, 1)
-    env.add_start(9, 1)
-    env.add_goal(9, 9)
-    return env
 
 
 def build_MLP(*sizes):
@@ -129,8 +122,7 @@ def update_weights(q_net, target_net, optim, batch_z, batch_a, batch_r, batch_nx
 
 
 def main(args):
-    env = build_env()
-    print(env)
+    env = GridWorld.load(args.env)
 
     dev = torch.device("cuda" if args.use_cuda and torch.cuda.is_available() else "cpu")
     q_net = build_MLP(2, *args.hidden_dims, 4)

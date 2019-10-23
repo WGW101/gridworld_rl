@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from gridworld import GridWorld
 from train_dqn import build_MLP
 import sys

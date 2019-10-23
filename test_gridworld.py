@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from gridworld import GridWorld
 
 if __name__ == "__main__":
