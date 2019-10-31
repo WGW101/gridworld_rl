@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 
 from gridworld import GridWorld
+import sys
 
 if __name__ == "__main__":
-    g = GridWorld(9, 9)
-    g.add_horizontal_wall(5, 1, 9)
-    g.add_clear_surface(4, 5, 6, 5)
-    g.add_start(1, 1)
-    g.add_start(9, 1)
-    g.add_goal(9, 9)
+    g = GridWorld.load(sys.argv[1])
 
     z = g.reset()
     done = False
